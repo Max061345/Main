@@ -1,1 +1,121 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import math as m
 
+def func(x):
+    return 50 * m.exp(-0.1 * x) + 5 * m.sin(x)
+def approximation(h):
+    return (func(x0 + h) - func(x0 - h)) / (2 * h)
+def derivative(t):
+    return -5 * m.exp(-0.1 * t) + 5 * m.cos(t)
+def R_calc(h, x):
+    return abs(approximation(h) - derivative(x))
+
+x0 = 5
+h = 10 ** -3
+y = []
+t = np.linspace(0, 20, 1000)
+h_mas = np.logspace(-20, 3, 230)
+R_mas = []
+for x in t:
+    y.append(func(x))
+
+for i in h_mas:
+    R_mas.append(R_calc(i, x0))
+
+print("first derivative(x0):",derivative(x0))
+print("Approximation:",approximation(h))
+# numerical differention error
+#print('NDE:',R)
+plt.plot(t, y)
+plt.grid()
+plt.xlabel('t')
+plt.ylabel('M(t)')
+plt.title("Soil Moisture Model M(t)")
+plt.show()
+
+
+plt.loglog(h_mas, R_mas)
+plt.grid()
+plt.xlabel('h')
+plt.ylabel('R')
+plt.show()
+
+
+idx_min = np.argmin(R_mas)
+
+h0 = h_mas[idx_min]
+R0 = R_mas[idx_min]
+
+print(f"Best precision with: {h0:.0e}")
+print(f"Precision for best h: {R0}")
+
+#4
+
+print(f"derivative for h: {approximation(h)}")
+print(f"derivative for 2h: {approximation(h * 2)}")
+
+
+#5
+R1 = R_calc(h, x0)
+print(f"Approximation error R1 for h = {h}: {R1}")
+
+#6
+def RR(h):
+    return approximation(h) + ((approximation(h) - approximation(h * 2)) / 3)
+
+
+def R2(h):
+    return abs(RR(h) - derivative(x0))
+
+R2_mas = []
+for hi in h_mas:
+    R2_mas.append(R2(hi))
+
+
+print(f"Runge-Romberg: {RR(h)}")
+print(f"Approximation error for RR: {R2(h)}")
+
+
+plt.loglog(h_mas, R2_mas)
+plt.grid()
+plt.xlabel('h')
+plt.ylabel('R2')
+plt.show()
+
+#7
+def yE(h):
+    return (approximation(h * 2) ** 2 - approximation(h * 4) * approximation(h)) / (2 * approximation(h * 2) - (approximation(h * 4) + approximation(h)))
+
+p = 1 / m.log(2) * m.log(abs((approximation(h * 4) - approximation(h * 2)) / (approximation(h * 2) - approximation(h))))
+
+def R3(h):
+    return abs(yE(h) - derivative(x0))
+
+print(f"Eitkein method: {yE(h)}")
+print(f"Order of precision: {p}")
+print(f"Approximation error for Eitkein: {R3(h)}")
+
+
+R3_mas = []
+for item in h_mas:
+    R3_mas.append(R3(item))
+
+
+plt.loglog(h_mas, R3_mas)
+plt.grid()
+plt.xlabel('h')
+plt.ylabel('R3')
+plt.show()
+
+
+figure = plt.figure()
+plt.grid()
+plt.xlabel('h')
+plt.ylabel('R')
+plt.loglog(h_mas, R_mas, label = 'R')
+plt.loglog(h_mas, R2_mas, label = 'R2')
+plt.loglog(h_mas, R3_mas, label = 'R3')
+plt.legend()
+plt.title('Comparison')
+plt.show()
