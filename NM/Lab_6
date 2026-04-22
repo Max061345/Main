@@ -1,0 +1,118 @@
+import numpy as np
+
+
+def read_matrix(filename):
+    """Зчитування матриці А з текстового файлу"""
+    return np.loadtxt(filename)
+
+def read_vector(filename):
+    """Зчитування вектора В з текстового файлу"""
+    return np.loadtxt(filename)
+
+def lu_decomposition(A):
+    """Знаходження LU-розкладу матриці А за алгоритмом з методички"""
+    n = A.shape[0]
+    L = np.zeros((n, n))
+    U = np.zeros((n, n))
+    
+    for i in range(n):
+        U[i, i] = 1.0
+
+    for k in range(n):
+        for i in range(k, n):
+            sum_LU = sum(L[i, j] * U[j, k] for j in range(k))
+            L[i, k] = A[i, k] - sum_LU
+            
+        for i in range(k + 1, n):
+            sum_LU = sum(L[k, j] * U[j, i] for j in range(k))
+            U[k, i] = (A[k, i] - sum_LU) / L[k, k]
+            
+    return L, U
+
+def write_lu_to_file(L, U, filename):
+    """Запис LU-розкладу матриці А в текстовий файл"""
+    with open(filename, 'w') as f:
+        f.write("Матриця L (нижня трикутна):\n")
+        np.savetxt(f, L, fmt='%.8f')
+        f.write("\nМатриця U (верхня трикутна):\n")
+        np.savetxt(f, U, fmt='%.8f')
+
+def solve_lu(L, U, B):
+    """Розв'язок системи рівнянь AX=B за допомогою LU-розкладу"""
+    n = len(B)
+    Z = np.zeros(n)
+    
+    for k in range(n):
+        sum_LZ = sum(L[k, j] * Z[j] for j in range(k))
+        Z[k] = (B[k] - sum_LZ) / L[k, k]
+        
+    X = np.zeros(n)
+    for k in range(n - 1, -1, -1):
+        sum_UX = sum(U[k, j] * X[j] for j in range(k + 1, n))
+        X[k] = Z[k] - sum_UX
+        
+    return X
+
+def matrix_vector_product(A, X):
+    """Обчислення добутку матриці на вектор"""
+    n = A.shape[0]
+    B_calc = np.zeros(n)
+    for i in range(n):
+        B_calc[i] = sum(A[i, j] * X[j] for j in range(n))
+    return B_calc
+
+def vector_norm(V):
+    """Обчислення норми вектора (максимальне за модулем значення)"""
+    return np.max(np.abs(V))
+
+
+if __name__ == "__main__":
+    n = 100
+    val_x = 2.5
+    
+    A_generated = np.random.rand(n, n) * 10
+    
+    X_true = np.full(n, val_x)
+    
+    B_generated = matrix_vector_product(A_generated, X_true)
+    
+    np.savetxt('matrix_A.txt', A_generated, fmt='%.8f')
+    np.savetxt('vector_B.txt', B_generated, fmt='%.8f')
+    
+
+    A = read_matrix('matrix_A.txt')
+    B = read_vector('vector_B.txt')
+    
+    L, U = lu_decomposition(A)
+    write_lu_to_file(L, U, 'lu_decomposition.txt')
+    
+    X_0 = solve_lu(L, U, B)
+    
+
+    B_calc = matrix_vector_product(A, X_0)
+    R_initial = B - B_calc
+    eps_initial = vector_norm(R_initial)
+    print(f"Початкова норма нев'язки ||AX - B|| після базового розв'язку: {eps_initial:.4e}")
+    
+    eps_target = 1e-14
+    max_iter = 100
+    iteration = 0
+    X_current = np.copy(X_0)
+    
+    for i in range(max_iter):
+        iteration += 1
+        
+        R = B - matrix_vector_product(A, X_current)
+        
+        delta_X = solve_lu(L, U, R)
+        
+        X_current = X_current + delta_X
+        
+        norm_delta_X = vector_norm(delta_X)
+        norm_R = vector_norm(R)
+        
+        if norm_delta_X <= eps_target or norm_R <= eps_target:
+            break
+            
+    print(f"Кількість ітерацій уточнення: {iteration}")
+    print(f"Кінцева норма нев'язки ||AX - B||: {norm_R:.4e}")
