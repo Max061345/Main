@@ -1,1 +1,156 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.integrate as spi
 
+
+def f(x):
+    return 50 + 20 * np.sin(np.pi * x / 12) + 5 * np.exp(-0.2 * (x - 12)**2)
+
+a, b = 0, 24
+I_0, _ = spi.quad(f, a, b, epsabs=1e-14, epsrel=1e-14)
+print(f"2. Точне значення інтегралу I_0: {I_0}")
+
+def simpson(f, a, b, N):
+    if N % 2 != 0:
+        N += 1
+    h = (b - a) / N
+    x = np.linspace(a, b, N + 1)
+    y = f(x)
+    return (h / 3) * (y[0] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-2:2]) + y[-1])
+
+N_vals = np.arange(10, 1002, 2)
+errors = []
+N_opt = None
+eps_opt = None
+
+for N in N_vals:
+    I_N = simpson(f, a, b, N)
+    err = abs(I_N - I_0)
+    errors.append(err)
+    if err <= 1e-12 and N_opt is None:
+        N_opt = N
+        eps_opt = err
+
+if N_opt is None:
+    N_opt = N_vals[np.argmin(errors)]
+    eps_opt = np.min(errors)
+
+print(f"4. N_opt для досягнення точності 1e-12: {N_opt}, похибка epsopt: {eps_opt}")
+
+plt.figure(figsize=(10, 6))
+plt.plot(N_vals, errors, label='Похибка Сімпсона epsilon(N)')
+plt.axhline(1e-12, color='r', linestyle='--', label='Задана точність 1e-12')
+if N_opt:
+    plt.scatter([N_opt], [eps_opt], color='red', zorder=5)
+plt.yscale('log')
+plt.xlabel('Кількість розбиттів відрізку (N)')
+plt.ylabel('Похибка обчислення')
+plt.title('Залежність похибки методу Сімпсона від кількості розбиттів')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+N_0 = max(8, int(N_opt / 10))
+N_0 = N_0 + (8 - N_0 % 8) % 8
+I_N0 = simpson(f, a, b, N_0)
+eps0 = abs(I_N0 - I_0)
+print(f"5. Похибка при N_0 = {N_0}: {eps0}")
+
+
+I_N0_2 = simpson(f, a, b, N_0 // 2)
+I_R = I_N0 + (I_N0 - I_N0_2) / 15
+epsR = abs(I_R - I_0)
+print(f"6. Метод Рунге-Ромберга: I_R = {I_R}, похибка epsR = {epsR}")
+
+I_N0_4 = simpson(f, a, b, N_0 // 4)
+denom = 2 * I_N0_2 - (I_N0 + I_N0_4)
+if abs(denom) > 1e-16:
+    I_E = (I_N0_2**2 - I_N0 * I_N0_4) / denom
+else:
+    I_E = I_N0
+epsE = abs(I_E - I_0)
+
+try:
+    p = (1 / np.log(2)) * np.log(abs((I_N0_4 - I_N0_2) / (I_N0_2 - I_N0)))
+except Exception:
+    p = float('nan')
+
+print(f"7. Метод Ейткена: I_E = {I_E}, похибка epsE = {epsE}, порядок методу p = {p}")
+
+
+compare_N = np.arange(16, 121, 8)
+err_S, err_R, err_E = [], [], []
+
+for n in compare_N:
+    i_n = simpson(f, a, b, n)
+    i_n2 = simpson(f, a, b, n // 2)
+    i_n4 = simpson(f, a, b, n // 4)
+    
+    err_S.append(abs(i_n - I_0))
+    err_R.append(abs(i_n + (i_n - i_n2) / 15 - I_0))
+    d = 2 * i_n2 - (i_n + i_n4)
+    if abs(d) > 1e-16:
+        ie = (i_n2**2 - i_n * i_n4) / d
+    else:
+        ie = i_n
+    err_E.append(abs(ie - I_0))
+
+plt.figure(figsize=(10, 6))
+
+plt.plot(compare_N, err_S, marker='o', color='blue', label='Сімпсон')
+plt.plot(compare_N, err_R, marker='s', color='orange', label='Рунге-Ромберг')
+plt.plot(compare_N, err_E, marker='d', color='green', label='Ейткен')
+plt.axhline(1e-12, color='red', linestyle='--', label='Задана точність 1e-12')
+
+plt.yscale('log')
+
+plt.xlabel('N (кількість розбиттів)')
+plt.ylabel('Абсолютна похибка (логарифмічна шкала)')
+plt.title('Порівняння похибок методів Сімпсона, Рунге-Ромберга та Ейткена')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+evals_count = 0
+def f_count(x):
+    global evals_count
+    evals_count += 1
+    return f(x)
+
+def adaptive_simp_rec(a, b, eps, S, fa, fc, fb):
+    c = (a + b) / 2
+    h = b - a
+    d = (a + c) / 2
+    e = (c + b) / 2
+    
+    fd = f_count(d)
+    fe = f_count(e)
+    
+    Sleft = (h / 12) * (fa + 4 * fd + fc)
+    Sright = (h / 12) * (fc + 4 * fe + fb)
+    S2 = Sleft + Sright
+    
+    if abs(S2 - S) <= 15 * eps:
+        return S2 + (S2 - S) / 15
+    
+    return (adaptive_simp_rec(a, c, eps/2, Sleft, fa, fd, fc) + 
+            adaptive_simp_rec(c, b, eps/2, Sright, fc, fe, fb))
+
+def adaptive_simpson(a, b, eps):
+    global evals_count
+    evals_count = 0
+    c = (a + b) / 2
+    h = b - a
+    
+    fa, fc, fb = f_count(a), f_count(c), f_count(b)
+    S = (h / 6) * (fa + 4 * fc + fb)
+    
+    result = adaptive_simp_rec(a, b, eps, S, fa, fc, fb)
+    return result, evals_count
+
+print("\n9. Дослідження адаптивного алгоритму:")
+for delta in [1e-4, 1e-6, 1e-8, 1e-10]:
+    res_ad, ev = adaptive_simpson(a, b, delta)
+    print(f"При delta = {delta:1.0e}: Інтеграл = {res_ad:.6f}, "
+          f"Похибка = {abs(res_ad-I_0):.2e}, Обчислень функції = {ev}")
