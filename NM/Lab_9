@@ -1,0 +1,155 @@
+import math
+
+# ==========================================
+# ЧАСТИНА 1: Цільові функції
+# ==========================================
+
+# 1. Тестова функція Розенброка (з теоретичних відомостей)
+def rosenbrock(X):
+    x1, x2 = X[0], X[1]
+    return 100 * (x1**2 - x2)**2 + (x1 - 1)**2
+
+# 2. Функції системи нелінійних рівнянь (m=2)
+def f1(X):
+    return X[0]**2 + X[1]**2 - 4
+
+def f2(X):
+    return X[1] - X[0]**2
+
+# Допоміжна цільова функція для розв'язку системи нелінійних рівнянь
+def system_phi(X):
+    return f1(X)**2 + f2(X)**2
+
+# ==========================================
+# ЧАСТИНА 2: Метод Хука-Дживса
+# ==========================================
+
+def hooke_jeeves(func, x0, initial_delta, q=2.0, p=2.0, eps1=1e-5, eps2=1e-5, max_iter=2000):
+    n = len(x0)
+    X0 = list(x0)             # Базисна точка X(0)
+    delta = list(initial_delta) # Початкова величина кроку
+    trajectory = [list(X0)]   # Масив для збереження траєкторії спуску
+
+    # Етап 1: Досліджуючий пошук
+    def explore(base_X, current_delta, allow_reduction=True):
+        X_current = list(base_X)
+        for i in range(n):
+            f_base = func(X_current)
+            
+            # Крок вперед
+            X_current[i] += current_delta[i]
+            if func(X_current) < f_base:
+                continue # Умова виконується, переходимо до наступного i
+            
+            # Крок назад
+            X_current[i] -= 2 * current_delta[i] # Відкат і крок в мінус
+            if func(X_current) < f_base:
+                continue # Умова виконується, переходимо до наступного i
+            
+            # Якщо кроки не дали результату, відкочуємося на базу
+            X_current[i] += current_delta[i]
+            
+            # Зменшення величини кроку (тільки під час основного досліджуючого пошуку)
+            if allow_reduction:
+                while True:
+                    current_delta[i] /= q
+                    # Якщо крок став меншим за eps1, залишаємо поточну координату
+                    if current_delta[i] < eps1:
+                        break
+                    
+                    # Повторюємо пошук по координаті
+                    X_current[i] += current_delta[i]
+                    if func(X_current) < f_base:
+                        break
+                    
+                    X_current[i] -= 2 * current_delta[i]
+                    if func(X_current) < f_base:
+                        break
+                    
+                    X_current[i] += current_delta[i]
+                    
+        return X_current
+
+    iterations = 0
+    while iterations < max_iter:
+        iterations += 1
+        f_X0 = func(X0)
+        
+        # Виконуємо досліджуючий пошук
+        X1 = explore(X0, delta, allow_reduction=True)
+        f_X1 = func(X1)
+        
+        # Перевірка умов закінчення пошуку
+        max_delta = max(delta)
+        if max_delta < eps1 and abs(f_X1 - f_X0) < eps2:
+            trajectory.append(list(X1))
+            break
+        
+        # Якщо базисна точка не змінилася, це може бути мінімум
+        if X1 == X0:
+            break
+            
+        trajectory.append(list(X1))
+        
+        # Етап 2: Пошук по зразку
+        while True:
+            # Знаходимо наступну точку по зразку
+            Xp2 = [X1[i] + p * (X1[i] - X0[i]) for i in range(n)]
+            
+            # Досліджуючий пошук з нової точки (БЕЗ зменшення кроку)
+            X2 = explore(Xp2, delta, allow_reduction=False)
+            
+            # Перевіряємо, чи дала нова точка покращення
+            if func(X2) < func(X1):
+                X0 = list(X1)
+                X1 = list(X2)
+                trajectory.append(list(X1))
+                # Продовжуємо пошук по зразку
+            else:
+                X0 = list(X1)
+                # Повертаємося до основного досліджуючого пошуку
+                break
+                
+    return X1, iterations, trajectory
+
+# ==========================================
+# ЧАСТИНА 3: Виконання завдань та запис у файл
+# ==========================================
+
+def save_trajectory(filename, trajectory):
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write("Крок\tx1\t\tx2\n")
+        f.write("-" * 40 + "\n")
+        for idx, point in enumerate(trajectory):
+            f.write(f"{idx}\t{point[0]:.6f}\t{point[1]:.6f}\n")
+
+if __name__ == "__main__":
+    # Завдання 3: Тестування на функції Розенброка
+    print("--- Завдання 3: Мінімізація функції Розенброка ---")
+    x0_rosen = [-1.2, 0.0]
+    initial_delta = [0.5, 0.5]
+    res_rosen, iters_rosen, traj_rosen = hooke_jeeves(rosenbrock, x0_rosen, initial_delta)
+    
+    print(f"Початкова точка: {x0_rosen}")
+    print(f"Точка мінімуму: x1 = {res_rosen[0]:.6f}, x2 = {res_rosen[1]:.6f}")
+    print(f"Значення функції f(X): {rosenbrock(res_rosen):.10e}")
+    print(f"Кількість ітерацій: {iters_rosen}\n")
+
+    # Завдання 4: Розв'язок системи нелінійних рівнянь
+    print("--- Завдання 4: Розв'язок системи нелінійних рівнянь ---")
+    x0_sys = [1.0, 1.0] # Початкове наближення
+    initial_delta_sys = [0.2, 0.2]
+    
+    res_sys, iters_sys, traj_sys = hooke_jeeves(system_phi, x0_sys, initial_delta_sys)
+    
+    print(f"Початкова точка: {x0_sys}")
+    print(f"Знайдений розв'язок: x1 = {res_sys[0]:.6f}, x2 = {res_sys[1]:.6f}")
+    print(f"Значення цільової функції Ф(X): {system_phi(res_sys):.10e}")
+    print(f"Похибка: f1 = {f1(res_sys):.6e}, f2 = {f2(res_sys):.6e}")
+    print(f"Кількість ітерацій: {iters_sys}\n")
+    
+    # Завдання 5: Вивід траєкторії в файл
+    filename = "trajectory_sys.txt"
+    save_trajectory(filename, traj_sys)
+    print(f"--- Завдання 5: Траєкторію спуску збережено у файл '{filename}' ---")
+    print(f"Число точок на траєкторії: {len(traj_sys)}")
