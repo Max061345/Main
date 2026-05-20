@@ -1,0 +1,303 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==========================================
+# Завдання 1: Задане рівняння та точний розв'язок
+# ==========================================
+def f(x, y):
+    """Диференціальне рівняння y' = f(x, y)"""
+    return y - x**2 + 1
+
+def y_exact(x):
+    """Аналітичний розв'язок рівняння"""
+    return (x + 1)**2 - 0.5 * np.exp(x)
+
+# Початкові умови
+a, b = 0, 2
+y0 = 0.5
+h_fixed = 0.01  # Заданий крок
+epsilon = 1e-4  # Задана точність для автовибору кроку
+
+# ==========================================
+# Завдання 6: Метод Рунге-Кутта 4-го порядку
+# ==========================================
+def rk4_step(f, x, y, h):
+    """Один крок методу Рунге-Кутта 4-го порядку"""
+    k1 = f(x, y)
+    k2 = f(x + h/2, y + h * k1/2)
+    k3 = f(x + h/2, y + h * k2/2)
+    k4 = f(x + h, y + h * k3)
+    return y + (h / 6) * (k1 + 2*k2 + 2*k3 + k4)
+
+def solve_rk4(f, a, b, y0, h):
+    """Розв'язання задачі Коші методом РК4 з фіксованим кроком"""
+    x_vals = np.arange(a, b + h, h)
+    y_vals = np.zeros(len(x_vals))
+    y_vals[0] = y0
+    
+    for i in range(len(x_vals) - 1):
+        y_vals[i+1] = rk4_step(f, x_vals[i], y_vals[i], h)
+        
+    return x_vals, y_vals
+
+# ==========================================
+# Завдання 2: Метод Адамса (прогноз-корекція 2-го порядку)
+# ==========================================
+def solve_adams_pc2(f, a, b, y0, h):
+    """
+    Розв'язання методом прогнозу і корекції Адамса 2-го порядку.
+    """
+    x_vals = np.arange(a, b + h, h)
+    n = len(x_vals)
+    y_vals = np.zeros(n)
+    y_vals[0] = y0
+    
+    y_pre = np.zeros(n)
+    
+    # Для методу 2-го порядку потрібен 1 попередній вузол, знаходимо його через РК4
+    if n > 1:
+        y_vals[1] = rk4_step(f, x_vals[0], y_vals[0], h)
+        
+    for i in range(1, n - 1):
+        # Прогноз (предиктор)
+        fn = f(x_vals[i], y_vals[i])
+        fn_minus_1 = f(x_vals[i-1], y_vals[i-1])
+        y_pre[i+1] = y_vals[i] + (h / 2) * (3 * fn - fn_minus_1)
+        
+        # Корекція (коректор) 
+        fn_plus_1_pre = f(x_vals[i+1], y_pre[i+1])
+        y_vals[i+1] = y_vals[i] + (h / 2) * (fn_plus_1_pre + fn)
+        
+    return x_vals, y_vals, y_pre
+
+# ==========================================
+# Завдання 9: РК4 з автоматичним вибором кроку
+# ==========================================
+def solve_rk4_auto(f, a, b, y0, h0, eps):
+    """РК4 з автовибором кроку за правилом Рунге"""
+    x_vals = [a]
+    y_vals = [y0]
+    h_vals = [h0]
+    
+    x = a
+    y = y0
+    h = h0
+    
+    while x < b:
+        if x + h > b:
+            h = b - x
+            
+        # Обчислення з кроком h
+        y_h = rk4_step(f, x, y, h)
+        
+        # Обчислення з двома кроками h/2
+        y_half_1 = rk4_step(f, x, y, h/2)
+        y_half_2 = rk4_step(f, x + h/2, y_half_1, h/2)
+        
+        # Локальна похибка за Рунге для 4-го порядку
+        error = (16 / 15) * abs(y_h - y_half_2)
+        
+        # Контроль кроку
+        if error > eps:
+            h /= 2  # Крок зменшуємо, розрахунок повторюємо
+            continue
+        elif error < eps / 32:  # 2^(s+1) = 2^5 = 32
+            h *= 2  # Крок збільшуємо для наступного етапу
+            
+        x += h
+        y = y_half_2  # Беремо більш точне значення
+        
+        x_vals.append(x)
+        y_vals.append(y)
+        h_vals.append(h)
+        
+    return np.array(x_vals), np.array(y_vals), np.array(h_vals)
+
+# ==========================================
+# Завдання 5: Метод Адамса з автовибором кроку
+# ==========================================
+def solve_adams_auto(f, a, b, y0, h0, eps):
+    """Метод Адамса з автоматичним вибором кроку на основі різниці прогноз-корекція"""
+    x_vals = [a]
+    y_vals = [y0]
+    h_vals = [h0]
+    
+    x = a
+    y = y0
+    h = h0
+    
+    # Перший крок робимо РК4
+    x_prev = x
+    y_prev = y
+    
+    x += h
+    y = rk4_step(f, x_prev, y_prev, h)
+    
+    x_vals.append(x)
+    y_vals.append(y)
+    h_vals.append(h)
+    
+    while x < b:
+        if x + h > b:
+            h = b - x
+            
+        fn = f(x, y)
+        fn_minus_1 = f(x_prev, y_prev)
+        
+        # Прогноз
+        y_pre = y + (h / 2) * (3 * fn - fn_minus_1)
+        
+        # Корекція
+        fn_plus_1 = f(x + h, y_pre)
+        y_cor = y + (h / 2) * (fn_plus_1 + fn)
+        
+        # Оцінка похибки: різниця між корекцією та прогнозом
+        error = abs(y_cor - y_pre) / 6.0 
+        
+        if error > eps:
+            h /= 2
+            # При зменшенні кроку потрібно перерахувати попередню точку (для простоти використовуємо РК4)
+            y = rk4_step(f, x_prev, y_prev, h)
+            x = x_prev + h
+            continue
+        elif error < eps / 8: # 2^(s+1) для s=2 це 8
+            h *= 2
+            
+        x_prev = x
+        y_prev = y
+        x += h
+        y = y_cor
+        
+        x_vals.append(x)
+        y_vals.append(y)
+        h_vals.append(h)
+        
+    return np.array(x_vals), np.array(y_vals), np.array(h_vals)
+
+# ==========================================
+# Блок виконання розрахунків
+# ==========================================
+
+# 1. Розрахунки з фіксованим кроком
+x_rk, y_rk = solve_rk4(f, a, b, y0, h_fixed)
+x_ad, y_ad, y_ad_pre = solve_adams_pc2(f, a, b, y0, h_fixed)
+y_exact_vals = y_exact(x_rk)
+
+# Завдання 7: Локальна похибка РК4 (точне значення)
+err_rk_exact = np.abs(y_rk - y_exact_vals)
+
+# Завдання 3 та 4: Локальні похибки Адамса
+err_ad_exact = np.abs(y_ad - y_exact_vals)
+err_ad_est = np.abs(y_ad - y_ad_pre) / 6.0  # Похибка через (Y_cor - Y_pre)
+
+# 2. Розрахунки з автоматичним вибором кроку
+x_rk_auto, y_rk_auto, h_rk_auto = solve_rk4_auto(f, a, b, y0, h_fixed, epsilon)
+x_ad_auto, y_ad_auto, h_ad_auto = solve_adams_auto(f, a, b, y0, h_fixed, epsilon)
+
+# Завдання 8: Локальна похибка за правилом Рунге (РК4)
+err_rk_runge = np.zeros(len(x_rk)-1)
+for i in range(len(x_rk)-1):
+    y_h = rk4_step(f, x_rk[i], y_rk[i], h_fixed)
+    y_half_1 = rk4_step(f, x_rk[i], y_rk[i], h_fixed/2)
+    y_half_2 = rk4_step(f, x_rk[i] + h_fixed/2, y_half_1, h_fixed/2)
+    err_rk_runge[i] = (16/15) * abs(y_h - y_half_2)
+
+
+# ==========================================
+# ВИВІД РЕЗУЛЬТАТІВ У ТЕРМІНАЛ
+# ==========================================
+print("="*60)
+print("     РЕЗУЛЬТАТИ ВИКОНАННЯ ЛАБОРАТОРНОЇ РОБОТИ №10")
+print("="*60)
+print(f"Інтервал інтегрування: [{a}, {b}]")
+print(f"Початкова умова: y({a}) = {y0}")
+print(f"Фіксований крок: h = {h_fixed}")
+print(f"Задана точність для автовибору: eps = {epsilon}")
+print("-" * 60)
+
+# Вивід для Рунге-Кутта
+max_err_rk_exact = np.max(err_rk_exact)
+max_err_rk_runge = np.max(err_rk_runge)
+print("1. Метод Рунге-Кутта 4-го порядку (Завдання 6, 7, 8):")
+print(f"   Максимальна точна похибка |y_n - y(x_n)|: {max_err_rk_exact:.2e}")
+print(f"   Макс. оцінка похибки за правилом Рунге:   {max_err_rk_runge:.2e}")
+
+if max_err_rk_runge < epsilon:
+    print(f"   [Оптимальність кроку]: Крок h={h_fixed} забезпечує задану точність ({epsilon}).")
+else:
+    print(f"   [Оптимальність кроку]: Крок h={h_fixed} завеликий для точності {epsilon}.")
+    # Оцінка необхідного кроку (Завдання 8)
+    h_needed = h_fixed * (epsilon / max_err_rk_runge)**(1/5)
+    print(f"   -> Необхідна величина кроку приблизно: h ≈ {h_needed:.4f}")
+
+print("\n2. Метод прогнозу та корекції Адамса (Завдання 2, 3, 4):")
+max_err_ad_exact = np.max(err_ad_exact)
+max_err_ad_est = np.max(err_ad_est)
+print(f"   Максимальна точна похибка |y_n - y(x_n)|: {max_err_ad_exact:.2e}")
+print(f"   Макс. оцінка похибки |y_cor - y_pre| / 6: {max_err_ad_est:.2e}")
+
+if max_err_ad_est < epsilon:
+    print(f"   [Оптимальність кроку]: Крок h={h_fixed} забезпечує задану точність.")
+else:
+    print(f"   [Оптимальність кроку]: Крок h={h_fixed} завеликий для заданої точності.")
+
+print("\n3. Автоматичний вибір кроку (Завдання 5, 9):")
+print(f"   РК4: розв'язок знайдено за {len(x_rk_auto)-1} кроків.")
+print(f"      - Мінімальний використаний крок: {np.min(h_rk_auto):.2e}")
+print(f"      - Максимальний використаний крок: {np.max(h_rk_auto):.2e}")
+print(f"   Адамс: розв'язок знайдено за {len(x_ad_auto)-1} кроків.")
+print(f"      - Мінімальний використаний крок: {np.min(h_ad_auto):.2e}")
+print(f"      - Максимальний використаний крок: {np.max(h_ad_auto):.2e}")
+print("="*60)
+
+# ==========================================
+# Побудова графіків
+# ==========================================
+plt.figure(figsize=(15, 10))
+
+# Графік 1: Розв'язки
+plt.subplot(2, 2, 1)
+plt.plot(x_rk, y_exact_vals, 'k-', linewidth=2, label='Точний розв\'язок')
+plt.plot(x_rk, y_rk, 'b--', label='Рунге-Кутта 4')
+plt.plot(x_ad, y_ad, 'r:', label='Адамс (Прогноз-корекція)')
+plt.title('Розв\'язки диференціального рівняння')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.legend()
+plt.grid(True)
+
+# Графік 2: Похибки методу Адамса
+plt.subplot(2, 2, 2)
+plt.plot(x_ad, err_ad_exact, 'r-', label='Точна похибка |y_n - y(x_n)|')
+plt.plot(x_ad, err_ad_est, 'g--', label='Оцінка похибки (y_cor - y_pre)/6')
+plt.title('Локальна похибка методу Адамса (Завдання 3 та 4)')
+plt.xlabel('x')
+plt.ylabel('Похибка')
+plt.yscale('log')
+plt.legend()
+plt.grid(True)
+
+# Графік 3: Похибки методу РК4
+plt.subplot(2, 2, 3)
+plt.plot(x_rk, err_rk_exact, 'b-', label='Точна похибка РК4')
+plt.plot(x_rk[:-1], err_rk_runge, 'm--', label='Оцінка Рунге (Завдання 8)')
+plt.title('Локальна похибка методу РК4 (Завдання 7 та 8)')
+plt.xlabel('x')
+plt.ylabel('Похибка')
+plt.yscale('log')
+plt.legend()
+plt.grid(True)
+
+# Графік 4: Автоматична зміна кроку
+plt.subplot(2, 2, 4)
+plt.step(x_rk_auto, h_rk_auto, 'b-', where='post', label='Зміна кроку h(x) РК4')
+plt.step(x_ad_auto, h_ad_auto, 'r-', where='post', label='Зміна кроку h(x) Адамс')
+plt.title('Автоматичний вибір кроку (Завдання 5 та 9)')
+plt.xlabel('x')
+plt.ylabel('Крок h')
+plt.yscale('log')
+plt.legend()
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
